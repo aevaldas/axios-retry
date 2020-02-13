@@ -41,6 +41,7 @@ describe('axiosRetry(axios, { retries, retryCondition })', () => {
   describe('when the response is successful', () => {
     it('should resolve with it', done => {
       const client = axios.create();
+
       setupResponses(client, [
         () =>
           nock('http://example.com')
@@ -54,6 +55,44 @@ describe('axiosRetry(axios, { retries, retryCondition })', () => {
         expect(result.status).toBe(200);
         done();
       }, done.fail);
+    });
+
+    describe('and the user supplies shouldRetrySuccessResponse', () => {
+      it('should use the user-supplied shouldRetrySuccessResponse', done => {
+        function shouldRetrySuccessResponse(response) {
+          return response.errorMessage && response.errorMessage.includes('too many requests');
+        }
+
+        const client = axios.create();
+        let retryCount = 0;
+
+        setupResponses(client, [
+          () =>
+            nock('http://example.com')
+              .get('/test')
+              .reply(200, { errorMessage: 'API rate limit exceeded: too many requests' }),
+          () =>
+            nock('http://example.com')
+              .get('/test')
+              .reply(200, { data: 'this is a useful response' })
+        ]);
+
+        axiosRetry(client, {
+          retries: 2,
+          retryCondition: () => true,
+          retryDelay: () => {
+            retryCount += 1;
+            return 0;
+          },
+          shouldRetrySuccessResponse
+        });
+
+        client.get('http://example.com/test').then(response => {
+          expect(retryCount).toBe(1);
+          expect(response.data).toEqual({ data: 'this is a useful response' });
+          done();
+        }, done.fail);
+      });
     });
   });
 

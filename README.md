@@ -56,6 +56,21 @@ client
   .catch(error => { // The first request fails
     error !== undefined
   });
+
+// Allows retries on status-code-200 responses to work around poorly-written APIs
+/**
+ * @returns {boolean}
+ **/
+const shouldRetrySuccessResponse = (responseBody) => {
+  return responseBody.errorMessage && responseBody.errorMessage.includes('too many requests');
+};
+
+axiosRetry(client, { shouldRetrySuccessResponse });
+
+client.get('/test')  // Retries until shouldRetrySuccessResponse returns false or another no-retry condition is met
+  .then(result => {
+    result.data; // 'ok'
+  });
 ```
 
 **Note:** Unless `shouldResetTimeout` is set, the plugin interprets the request timeout as a global value, so it is not used for each retry but for the whole request lifecycle.
@@ -66,8 +81,9 @@ client
 | --- | --- | --- | --- |
 | retries | `Number` | `3` | The number of times to retry before failing. |
 | retryCondition | `Function` | `isNetworkOrIdempotentRequestError` | A callback to further control if a request should be retried.  By default, it retries if it is a network error or a 5xx error on an idempotent request (GET, HEAD, OPTIONS, PUT or DELETE). |
-| shouldResetTimeout | `Boolean` | false | Defines if the timeout should be reset between retries |
 | retryDelay | `Function` | `function noDelay() { return 0; }` | A callback to further control the delay between retried requests. By default there is no delay between retries. Another option is exponentialDelay ([Exponential Backoff](https://developers.google.com/analytics/devguides/reporting/core/v3/errors#backoff)). The function is passed `retryCount` and `error`. |
+| shouldResetTimeout | `Boolean` | false | Defines if the timeout should be reset between retries |
+| shouldRetrySuccessResponse | `Function` | `function shouldRetrySuccessResponse() { return false; }` | A function to control if a response with a 200 status code should be retried.  Useful when you need to use APIs that send 200 status codes when an error status code (e.g. 429) is more appropriate. The function is passed the server's response body (not the entire response; just the [HTTP response body](https://developer.mozilla.org/en-US/docs/Web/HTTP/Messages#Body_2)).  |  
 
 ## Testing
 
